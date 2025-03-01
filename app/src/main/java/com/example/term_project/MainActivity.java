@@ -6,21 +6,25 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.util.Log;
 
-import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 public class MainActivity extends AppCompatActivity {
     private GestureDetector gestureDetector;
+    private DatabaseReference databaseReference; // Firebase database reference
+
     //Todo if need to debug swipe gestures then use view>tools>logcat and check output
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -32,7 +36,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Attach GestureDetector to a View
         View swipeView = findViewById(R.id.swipe_area);
-        if(swipeView != null){
+        if (swipeView != null) {
             swipeView.setOnTouchListener((v, event) -> {
                 boolean result = gestureDetector.onTouchEvent(event);
                 Log.d("GESTURE", "Touch event detected: " + event.getAction());
@@ -42,10 +46,38 @@ public class MainActivity extends AppCompatActivity {
         } else {
             Log.e("GESTURE", "Error: swipe_area view not found!");
         }
+        // Keep Firebase database logic separate
+        setupFirebase();
+    }
+
+    // Function to handle Firebase reads separately
+    private void setupFirebase() {
+        DatabaseReference databaseReference = FirebaseDatabase.getInstance().getReference("test_data");
+
+        // Write data to Firebase
+        databaseReference.setValue("Hello, Firebase!")
+                .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "Write successful!"))
+                .addOnFailureListener(e -> Log.e("FIREBASE", "Write failed", e));
+
+        databaseReference.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot snapshot) {
+                if (snapshot.exists() && snapshot.getValue() != null) {
+                    String value = snapshot.getValue(String.class);
+                    Log.d("FIREBASE", "Read value: " + value);
+                } else {
+                    Log.e("FIREBASE", "No data found in database.");
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {
+                Log.e("FIREBASE", "Read failed", error.toException());
+            }
+        });
     }
 
     // Custom Gesture Listener Class
-    //Todo make variables to track data and pass along to firebase for storage
     private class SwipeGestureListener extends GestureDetector.SimpleOnGestureListener {
         private static final int SWIPE_THRESHOLD = 50;
         private static final int SWIPE_VELOCITY_THRESHOLD = 50;
@@ -87,22 +119,6 @@ public class MainActivity extends AppCompatActivity {
                 Log.e("GESTURE", "Eror processign swip gesture", e);
             }
             return false;
-        }
-
-        public void onSwipeRight() {
-            System.out.println("Swiped Right");
-        }
-
-        public void onSwipeLeft() {
-            System.out.println("Swiped Left");
-        }
-
-        public void onSwipeUp() {
-            System.out.println("Swiped Up");
-        }
-
-        public void onSwipeDown() {
-            System.out.println("Swiped Down");
         }
     }
 }
