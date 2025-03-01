@@ -20,7 +20,10 @@ public class MainActivity extends AppCompatActivity {
     private GestureDetector gestureDetector;
     private DatabaseReference databaseReference; // Firebase database reference
 
-    //Todo if need to debug swipe gestures then use view>tools>logcat and check output
+    /*
+    * Todo if need to debug swipe gestures then use view>tools>logcat and check output. Need to record data to store at Firebase
+    * Todo And add login/input for atleast username/id to check for patterns
+    */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -51,14 +54,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Function to handle Firebase reads separately
+    //todo change out test values for actuall x,z, or velocity to pass to database server
     private void setupFirebase() {
         DatabaseReference databaseReference = FirebaseDatabase.getInstance().getReference("test_data");
 
-        // Write data to Firebase
+        // Write data to Firebase/ Should work(did for me)
         databaseReference.setValue("Hello, Firebase!")
                 .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "Write successful!"))
                 .addOnFailureListener(e -> Log.e("FIREBASE", "Write failed", e));
 
+
+        //Read From Firebase/ should work(did for me)
         databaseReference.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot snapshot) {
@@ -79,8 +85,9 @@ public class MainActivity extends AppCompatActivity {
 
     // Custom Gesture Listener Class
     private class SwipeGestureListener extends GestureDetector.SimpleOnGestureListener {
-        private static final int SWIPE_THRESHOLD = 50;
-        private static final int SWIPE_VELOCITY_THRESHOLD = 50;
+        // Sensitivity of min speed and velocity to record swipe data(change if need be for smoother functinalitiy)
+        private static final int SWIPE_THRESHOLD = 75;
+        private static final int SWIPE_VELOCITY_THRESHOLD = 75;
 
         @Override
         public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
@@ -88,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
             float diffY = e2.getY() - e1.getY();
 
             Log.d("Gesture", "onFling dected - X: " + diffX + ", Y: " + diffY);
-
+            //todo use data to do something and make it visible to user not just a log
             try {
                 if (Math.abs(diffX) > Math.abs(diffY)) {
                     // Horizontal swipe
