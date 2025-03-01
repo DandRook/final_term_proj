@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">term_project</string>
+    <string name="welcome_msg">Wlecome!</string>
+    <string name="welcome_msg1">Welcome!</string>
+    <string name="welcome_msg2">Welcome Back!</string>
+    <string name="rlogin">Login</string>
+    <string name="u_name">user name</string>
+    <string name="knwn_pass">Password</string>
+    <string name="uid_txt" />
+    <string name="uid_txt1">Username:</string>
+    <string name="pswd_txt">Password:</string>
+    <string name="username">Username</string>
+    <string name="sign_in_to_continue">Sign in to Continue</string>
+</resources>
