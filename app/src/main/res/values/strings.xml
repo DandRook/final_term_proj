@@ -11,4 +11,8 @@
     <string name="pswd_txt">Password:</string>
     <string name="username">Username</string>
     <string name="sign_in_to_continue">Sign in to Continue</string>
+    <string name="login">Login</string>
+    <string name="password">Password</string>
+    <string name="register">New User</string>
+    <string name="register_act">Register</string>
 </resources>
