@@ -5,6 +5,7 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 import android.util.Log;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -18,6 +19,18 @@ import com.google.firebase.database.ValueEventListener;
 
 public class MainActivity extends AppCompatActivity {
     private GestureDetector gestureDetector;
+    private TextView swipeTextView; // Reference to the TextView that shows questions
+    private int currentQuestionIndex = 0; // To track the current question
+
+    // Array of quiz questions for user to swipe through, can swipe right or left
+    private String[] quizQuestions = {
+            "What is the capital of France?",
+            "What is 2 + 2?",
+            "Who wrote '1984'?",
+            "What is the smallest planet in our solar system?",
+            "What is the largest ocean on Earth?"
+    };
+
     private DatabaseReference databaseReference; // Firebase database reference
 
     //Todo if need to debug swipe gestures then use view>tools>logcat and check output
@@ -31,23 +44,51 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
+        // Initialize TextView reference
+        swipeTextView = findViewById(R.id.swipe_area);
+
         // Initialize GestureDetector inside onCreate()
         gestureDetector = new GestureDetector(this, new SwipeGestureListener());
 
         // Attach GestureDetector to a View
-        View swipeView = findViewById(R.id.swipe_area);
+        View swipeView = findViewById(R.id.main);
         if (swipeView != null) {
             swipeView.setOnTouchListener((v, event) -> {
                 boolean result = gestureDetector.onTouchEvent(event);
                 Log.d("GESTURE", "Touch event detected: " + event.getAction());
-                // keep true else won't record swipes just touches
+                // Keep true else won't record swipes just touches
                 return true;
             });
         } else {
             Log.e("GESTURE", "Error: swipe_area view not found!");
         }
+        // Display the first question from array on startup screen
+        updateQuestion();
+
         // Keep Firebase database logic separate
         setupFirebase();
+    }
+    // Function to update the question displayed in the TextView
+    private void updateQuestion() {
+        swipeTextView.setText(quizQuestions[currentQuestionIndex]);
+    }
+
+    // Function to move to the next question by right swipe
+    private void moveToNextQuestion() {
+        currentQuestionIndex++;
+        if (currentQuestionIndex >= quizQuestions.length) {
+            currentQuestionIndex = 0; // Loop back to the first question
+        }
+        updateQuestion();
+    }
+
+    // Function to move to the previous question by left swipe
+    private void moveToPreviousQuestion() {
+        currentQuestionIndex--;
+        if (currentQuestionIndex < 0) {
+            currentQuestionIndex = quizQuestions.length - 1; // Loop back to the last question
+        }
+        updateQuestion();
     }
 
     // Function to handle Firebase reads separately
@@ -87,36 +128,27 @@ public class MainActivity extends AppCompatActivity {
             float diffX = e2.getX() - e1.getX();
             float diffY = e2.getY() - e1.getY();
 
-            Log.d("Gesture", "onFling dected - X: " + diffX + ", Y: " + diffY);
+            Log.d("Gesture", "onFling detected - X: " + diffX + ", Y: " + diffY);
 
             try {
                 if (Math.abs(diffX) > Math.abs(diffY)) {
                     // Horizontal swipe
                     if (Math.abs(diffX) > SWIPE_THRESHOLD && Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
                         if (diffX > 0) {
-                            // Right Swipe
+                            // Right swipe moves to next question
                             Log.d("GESTURE", "Swiped Right");
+                            moveToNextQuestion();
                         } else {
-                            // Left Swipe
+                            // Left Swipe moves to previous question
                             Log.d("GESTURE", "Swiped Left");
-                        }
-                        return true;
-                    }
-                } else {
-                    // Vertical swipe
-                    if (Math.abs(diffY) > SWIPE_THRESHOLD && Math.abs(velocityY) > SWIPE_VELOCITY_THRESHOLD) {
-                        if (diffY > 0) {
-                            // Down Swipe
-                            Log.d("GESTURE", "Swiped Down");
-                        } else {
-                            // Up Swipe
-                            Log.d("GESTURE", "Swiped Up");
+                            moveToPreviousQuestion();
                         }
                         return true;
                     }
                 }
+
             } catch (Exception e) {
-                Log.e("GESTURE", "Eror processign swip gesture", e);
+                Log.e("GESTURE", "Error processing swipe gesture", e);
             }
             return false;
         }
