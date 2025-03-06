@@ -9,6 +9,10 @@ import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -191,17 +195,19 @@ public class MainActivity extends AppCompatActivity {
         // Gen a unique key for each instance
         String swipeId = userRef.push().getKey();
         long timestamp = System.currentTimeMillis();  // Current timestamp
+        String formattedTimestamp = SwipeData.getFormattedTimestamp(timestamp);  // Get formatted timestamp
 
         Log.d("DEBUG", "Generated swipeId: " + swipeId);
-        Log.d("DEBUG", "Timestamp: " + timestamp);
+        Log.d("DEBUG", "Timestamp (milliseconds): " + timestamp);
+        Log.d("DEBUG", "Formatted Timestamp: " + formattedTimestamp);
 
         // Create a new swipe record
-        SwipeData swipeData = new SwipeData(action, quizQuestions[currentQuestionIndex], timestamp, velocityX, velocityY,
+        SwipeData swipeData = new SwipeData(action, quizQuestions[currentQuestionIndex], formattedTimestamp, velocityX, velocityY,
                 duration, startX, startY, endX, endY, pressure);
 
         Log.d("DEBUG", "SwipeData - Action: " + swipeData.action);
         Log.d("DEBUG", "SwipeData - Question: " + swipeData.question);
-        Log.d("DEBUG", "SwipeData - Timestamp: " + swipeData.timestamp);
+        Log.d("DEBUG", "Formatted Timestamp: " + swipeData.formattedTimestamp);
 
         if (swipeId != null) {
             // Save data as a structured object
@@ -217,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
     public static class SwipeData {
         public String action;
         public String question;
-        public long timestamp;
+        public String formattedTimestamp;
         public float velocityX;
         public float velocityY;
         public long duration;  // Duration of the swipe in milliseconds
@@ -228,11 +234,11 @@ public class MainActivity extends AppCompatActivity {
         public float pressure;
 
         // Constructor
-        public SwipeData(String action, String question, long timestamp, float velocityX, float velocityY,
+        public SwipeData(String action, String question, String formattedTimestamp, float velocityX, float velocityY,
                          long duration, float startX, float startY, float endX, float endY, float pressure) {
             this.action = action;
             this.question = question;
-            this.timestamp = timestamp;
+            this.formattedTimestamp = formattedTimestamp;
             this.velocityX = velocityX;
             this.velocityY = velocityY;
             this.duration = duration;
@@ -241,6 +247,12 @@ public class MainActivity extends AppCompatActivity {
             this.endX = endX;
             this.endY = endY;
             this.pressure = pressure;
+        }
+        // Helper method to convert timestamp to a human-readable format
+        public static String getFormattedTimestamp(long timestamp) {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+            Date date = new Date(timestamp);
+            return sdf.format(date);  // Returns timestamp as a readable string
         }
     }
 }
