@@ -80,7 +80,12 @@ public class Login extends AppCompatActivity {
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
                             Toast.makeText(Login.this, "Login Successful!", Toast.LENGTH_SHORT).show();
-                            startActivity(new Intent(Login.this, MainActivity.class));
+                            // Get username from email before the @
+                            String username = email.substring(0, email.indexOf('@'));
+                            Intent intent = new Intent(Login.this, MainActivity.class);
+                            intent.putExtra("Username", username);
+                            startActivity(intent);
+
                             finish();
                         } else {
                             Toast.makeText(Login.this, "Login Failed! " + Objects.requireNonNull(task.getException()).getMessage(), Toast.LENGTH_SHORT).show();

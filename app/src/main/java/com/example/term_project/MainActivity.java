@@ -11,15 +11,14 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
+
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
 
 public class MainActivity extends AppCompatActivity {
     private GestureDetector gestureDetector;
     private TextView swipeTextView; // Reference to the TextView that shows questions
+    private String uId = "";
     private int currentQuestionIndex = 0; // To track the current question
 
     // Array of quiz questions for user to swipe through, can swipe right or left
@@ -38,6 +37,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        uId = getIntent().getStringExtra("Username");
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -46,7 +48,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize TextView reference
         swipeTextView = findViewById(R.id.swipe_area);
-
+        // Create database reference
+        databaseReference = FirebaseDatabase.getInstance().getReference("user_data");
         // Initialize GestureDetector inside onCreate()
         gestureDetector = new GestureDetector(this, new SwipeGestureListener());
 
@@ -68,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
         // Keep Firebase database logic separate
         setupFirebase();
     }
+
     // Function to update the question displayed in the TextView
     private void updateQuestion() {
         swipeTextView.setText(quizQuestions[currentQuestionIndex]);
@@ -93,64 +97,98 @@ public class MainActivity extends AppCompatActivity {
 
     // Function to handle Firebase reads separately
     private void setupFirebase() {
-        DatabaseReference databaseReference = FirebaseDatabase.getInstance().getReference("test_data");
 
-        // Write data to Firebase
-        databaseReference.setValue("Hello, Firebase!")
-                .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "Write successful!"))
-                .addOnFailureListener(e -> Log.e("FIREBASE", "Write failed", e));
-
-        databaseReference.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(DataSnapshot snapshot) {
-                if (snapshot.exists() && snapshot.getValue() != null) {
-                    String value = snapshot.getValue(String.class);
-                    Log.d("FIREBASE", "Read value: " + value);
-                } else {
-                    Log.e("FIREBASE", "No data found in database.");
-                }
-            }
-
-            @Override
-            public void onCancelled(DatabaseError error) {
-                Log.e("FIREBASE", "Read failed", error.toException());
-            }
-        });
+        // Check for uId and start data tranmisssion
+        if (uId != null && !uId.isEmpty()) {
+            DatabaseReference userRef = databaseReference.child(uId);
+            userRef.child("activity").push().setValue("User " + uId + " Started the quiz")
+                    .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "User data saved!"))
+                    .addOnFailureListener(e -> Log.e("FIREBASE", "Write failed", e));
+        }
     }
 
     // Custom Gesture Listener Class
     private class SwipeGestureListener extends GestureDetector.SimpleOnGestureListener {
         private static final int SWIPE_THRESHOLD = 50;
-        private static final int SWIPE_VELOCITY_THRESHOLD = 50;
 
         @Override
         public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
             float diffX = e2.getX() - e1.getX();
-            float diffY = e2.getY() - e1.getY();
-
-            Log.d("Gesture", "onFling detected - X: " + diffX + ", Y: " + diffY);
+            Log.d("Gesture", "onFling detected - X: " + diffX);
 
             try {
-                if (Math.abs(diffX) > Math.abs(diffY)) {
-                    // Horizontal swipe
-                    if (Math.abs(diffX) > SWIPE_THRESHOLD && Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
-                        if (diffX > 0) {
-                            // Right swipe moves to next question
-                            Log.d("GESTURE", "Swiped Right");
-                            moveToNextQuestion();
-                        } else {
-                            // Left Swipe moves to previous question
-                            Log.d("GESTURE", "Swiped Left");
-                            moveToPreviousQuestion();
-                        }
-                        return true;
+                if (Math.abs(diffX) > SWIPE_THRESHOLD) {
+                    if (diffX > 0) {
+                        // Right swipe moves to next question
+                        Log.d("GESTURE", "Swiped Right");
+                        sendUserResponse("Swiped Right");
+                        moveToNextQuestion();
+                    } else {
+                        // Left Swipe moves to previous question
+                        Log.d("GESTURE", "Swiped Left");
+                        sendUserResponse("Swiped Left");
+                        moveToPreviousQuestion();
                     }
+                    return true;
                 }
 
             } catch (Exception e) {
                 Log.e("GESTURE", "Error processing swipe gesture", e);
             }
             return false;
+        }
+    }
+
+    private void sendUserResponse(String action) {
+        Log.d("DEBUG", "sendUserResponse called for action: " + action);
+
+        if (uId == null || uId.isEmpty()) {
+            Log.e("FIREBASE", "uId is NULL or EMPTY! Cannot save swipe.");
+            return; // Stop execution if uId is invalid
+        }
+            DatabaseReference userRef = databaseReference.child(uId).child("swipes");
+
+            // Gen a unique key for each instance
+            String swipeId = userRef.push().getKey();
+            long timestamp = System.currentTimeMillis();
+
+            Log.d("DEBUG", "Generated swipeId: " + swipeId);
+            Log.d("DEBUG", "Timestamp: " + timestamp);
+
+            // Debug logs to check values before saving
+            Log.d("DEBUG", "SwipeData - Action: " + action);
+            Log.d("DEBUG", "SwipeData - Question: " + quizQuestions[currentQuestionIndex]);
+            Log.d("DEBUG", "SwipeData - Timestamp: " + timestamp);
+
+            if(swipeId != null){
+                // Create a new swipe record
+                SwipeData swipeData = new SwipeData(action, quizQuestions[currentQuestionIndex], timestamp);
+
+                Log.d("DEBUG", "SwipeData - Action: " + swipeData.action);
+                Log.d("DEBUG", "SwipeData - Question: " + swipeData.question);
+                Log.d("DEBUG", "SwipeData - Timestamp: " + swipeData.timestamp);
+
+                // Save data as a structured object
+                userRef.child(swipeId).setValue(swipeData)
+                    .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "Swipe action logged!"))
+                    .addOnFailureListener(e -> Log.e("FIREBASE", "Failed to log swipe action", e));
+        } else {
+                Log.e("FIREBASE", "uId is NULL or EMPTY! Cannot save swipe.");
+            }
+
+    }
+
+    // Helper class to structure swipe data
+    public static class SwipeData {
+        public String action;
+        public String question;
+        public long timestamp;
+
+        // Constructor
+        public SwipeData(String action, String question, long timestamp) {
+            this.action = action;
+            this.question = question;
+            this.timestamp = timestamp;
         }
     }
 }
