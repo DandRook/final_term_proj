@@ -213,7 +213,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Helper class to structure swipe data
+    // Helper class to structure swipe data!
     public static class SwipeData {
         public String action;
         public String question;
