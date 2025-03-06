@@ -8,11 +8,21 @@
 
     <TextView
         android:id="@+id/swipe_area"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="375dp"
+        android:layout_height="661dp"
         android:background="#86bbcd"
         android:gravity="center"
         android:text="Swipe here!"
         android:textColor="#241fab"
         android:textSize="18sp" />
+
+    <Button
+        android:id="@+id/return_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Back to Login"
+        android:layout_gravity="bottom|center_horizontal" />
+
+
+
 </LinearLayout>
