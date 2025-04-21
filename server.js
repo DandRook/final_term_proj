@@ -8,27 +8,29 @@ const PORT = process.env.PORT || 3000;
 let quizQuestions = [];
 let currentQuestion = null;
 let currentQuestionStartTime = null;
-const rotationInterval = 60000; // 60s
+const rotationInterval = 60000;
 let playerQueue = [];
 
-// Load CSV on startup
+// Load CSV and initialize first question synchronously
 fs.createReadStream('questions.csv')
   .pipe(csv())
   .on('data', (row) => quizQuestions.push(row))
   .on('end', () => {
-    console.log('CSV loaded!');
-    rotateQuestion(); // start rotation
-    setInterval(rotateQuestion, rotationInterval);
+    console.log(`Loaded ${quizQuestions.length} questions`);
+    if (quizQuestions.length > 0) {
+      rotateQuestion(); // Preload first question
+      setInterval(rotateQuestion, rotationInterval);
+    } else {
+      console.error('No quiz questions loaded!');
+    }
   });
 
-// Pick a new random question and start timer
 function rotateQuestion() {
   currentQuestion = quizQuestions[Math.floor(Math.random() * quizQuestions.length)];
   currentQuestionStartTime = Date.now();
   console.log(`New question: ${currentQuestion.question}`);
 }
 
-// Pair players if possible
 function matchPlayer(userId) {
   if (playerQueue.length > 0) {
     const opponentId = playerQueue.shift();
@@ -49,13 +51,18 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: 'Missing userId' }));
     }
 
+    if (!currentQuestion || !currentQuestionStartTime) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Questions not yet initialized' }));
+    }
+
     const matchStatus = matchPlayer(userId);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       ...matchStatus,
-      question: currentQuestion ? currentQuestion.question : null,
-      questionId: currentQuestion ? currentQuestion.id : null,
+      question: currentQuestion.question,
+      questionId: currentQuestion.id,
       startTime: currentQuestionStartTime,
       deadline: currentQuestionStartTime + rotationInterval
     }));
@@ -68,3 +75,4 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`Server live at http://localhost:${PORT}`);
 });
+
