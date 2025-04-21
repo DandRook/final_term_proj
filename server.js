@@ -43,6 +43,11 @@ function matchPlayer(userId) {
 
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
+  
+  if (parsedUrl.pathname === '/ping') {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  return res.end(JSON.stringify({ status: 'alive' }));
+}
 
   if (parsedUrl.pathname === '/next-question' && req.method === 'GET') {
     const userId = parsedUrl.query.userId;
@@ -71,11 +76,6 @@ const server = http.createServer((req, res) => {
     res.end('PvP Quiz Server is running!');
   }
 });
-
-if (parsedUrl.pathname === '/ping') {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  return res.end(JSON.stringify({ status: 'alive' }));
-}
 
 server.listen(PORT, () => {
   console.log(`Server live at http://localhost:${PORT}`);
