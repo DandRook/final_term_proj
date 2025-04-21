@@ -37,7 +37,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.10.0"))
     // Add the dependency for the Firebase SDK for Google Analytics
     implementation("com.google.firebase:firebase-analytics")
-
+    //Ok-httpclient implementation
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.appcompat)
     implementation(libs.firebase.database)
     implementation(libs.material)

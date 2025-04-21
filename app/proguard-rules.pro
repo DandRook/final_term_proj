@@ -11,7 +11,14 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+# Keep OkHttp classes
+-keep class okhttp3.** { *; }
+-dontwarn okhttp3.**
 
+# Keep callback-related classes
+-keepclassmembers class * {
+    @okhttp3.* <methods>;
+}
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
 #-keepattributes SourceFile,LineNumberTable
