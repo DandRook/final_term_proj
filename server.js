@@ -72,6 +72,11 @@ const server = http.createServer((req, res) => {
   }
 });
 
+if (parsedUrl.pathname === '/ping') {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  return res.end(JSON.stringify({ status: 'alive' }));
+}
+
 server.listen(PORT, () => {
   console.log(`Server live at http://localhost:${PORT}`);
 });
