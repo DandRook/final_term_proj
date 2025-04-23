@@ -13,7 +13,15 @@
         android:textSize="24sp"
         android:textStyle="bold"
         android:layout_marginBottom="16dp" />
-    <!-- add button to go back to main act-->
+
+    <Button
+        android:id="@+id/button_return_main"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Return to Main"
+        android:layout_marginTop="24dp"
+        android:layout_gravity="center_horizontal"/>
+
     <ListView
         android:id="@+id/leaderboard_list"
         android:layout_width="match_parent"

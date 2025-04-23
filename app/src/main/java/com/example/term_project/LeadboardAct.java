@@ -1,12 +1,14 @@
 package com.example.term_project;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -34,15 +36,18 @@ public class LeadboardAct extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.act_leaderboard);
 
+        Button returnButton = findViewById(R.id.button_return_main);
+        returnButton.setOnClickListener(view -> finish());
+
         leaderboardList = findViewById(R.id.leaderboard_list);
         leaderboardEntries = new ArrayList<>();
         adapter = new LeaderboardAdapter(this, leaderboardEntries);
         leaderboardList.setAdapter(adapter);
 
+
         databaseReference = FirebaseDatabase.getInstance().getReference("user_data");
         loadLeaderboardData();
     }
-    // TODO add button to go back to main act page
     private void loadLeaderboardData() {
         databaseReference.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
