@@ -1,4 +1,4 @@
-// server.js
+//server.js
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
@@ -13,19 +13,20 @@ let playerQueue = [];
 let recentQuestions = [];
 const recentLimit = 5;
 
-// Load CSV and initialize first question synchronously
+// Load CSV
 fs.createReadStream('questions.csv')
   .pipe(csv())
   .on('data', (row) => quizQuestions.push(row))
   .on('end', () => {
     console.log(`Loaded ${quizQuestions.length} questions`);
     if (quizQuestions.length > 0) {
-      rotateQuestion(); // Preload first question
+      rotateQuestion();
       setInterval(rotateQuestion, rotationInterval);
     }
   });
 
-const pool = quizQuestions.filter(q => !recentQuestions.includes(q.id));
+function rotateQuestion() {
+  const pool = quizQuestions.filter(q => !recentQuestions.includes(q.id));
   const candidates = pool.length > 0 ? pool : quizQuestions;
 
   currentQuestion = candidates[Math.floor(Math.random() * candidates.length)];
@@ -39,7 +40,6 @@ const pool = quizQuestions.filter(q => !recentQuestions.includes(q.id));
   console.log(`New question: ${currentQuestion.question}`);
 }
 
-// playerque in case none available
 function matchPlayer(userId) {
   if (playerQueue.length > 0) {
     const opponentId = playerQueue.shift();
@@ -50,7 +50,6 @@ function matchPlayer(userId) {
   }
 }
 
-// Server code for next question & submit answer
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
 
@@ -126,4 +125,3 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`Server live at http://localhost:${PORT}`);
 });
-
