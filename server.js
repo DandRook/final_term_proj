@@ -10,34 +10,21 @@ let currentQuestion = null;
 let currentQuestionStartTime = null;
 const rotationInterval = 60000;
 let playerQueue = [];
-let recentQuestions = [];
-const recentLimit = 5;
 
-// Load CSV
 fs.createReadStream('questions.csv')
   .pipe(csv())
   .on('data', (row) => quizQuestions.push(row))
   .on('end', () => {
     console.log(`Loaded ${quizQuestions.length} questions`);
-    if (quizQuestions.length > 0) {
-      rotateQuestion();
-      setInterval(rotateQuestion, rotationInterval);
-    }
+    rotateQuestion();
+    setInterval(rotateQuestion, rotationInterval);
   });
 
 function rotateQuestion() {
-  const pool = quizQuestions.filter(q => !recentQuestions.includes(q.id));
-  const candidates = pool.length > 0 ? pool : quizQuestions;
-
-  currentQuestion = candidates[Math.floor(Math.random() * candidates.length)];
+  const index = Math.floor(Math.random() * quizQuestions.length);
+  currentQuestion = quizQuestions[index];
   currentQuestionStartTime = Date.now();
-
-  recentQuestions.push(currentQuestion.id);
-  if (recentQuestions.length > recentLimit) {
-    recentQuestions.shift();
-  }
-
-  console.log(`New question: ${currentQuestion.question}`);
+  console.log(`Rotated question: ${currentQuestion.question}`);
 }
 
 function matchPlayer(userId) {
@@ -58,11 +45,6 @@ const server = http.createServer((req, res) => {
     if (!userId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Missing userId' }));
-    }
-
-    if (!currentQuestion) {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Questions not ready yet' }));
     }
 
     const matchStatus = matchPlayer(userId);
@@ -89,39 +71,31 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const { userId, questionId, userAnswer } = JSON.parse(body);
-        if (!userId || !questionId || userAnswer == null) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ error: 'Missing fields' }));
-        }
-
         const question = quizQuestions.find(q => q.id === questionId);
-        if (!question) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ error: 'Question not found' }));
-        }
+        if (!question) throw new Error("Invalid question");
 
         const correct = question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase();
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ correct }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Server error' }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
       }
     });
   }
 
   else if (parsedUrl.pathname === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'alive' }));
+    res.end(JSON.stringify({ status: 'online' }));
   }
 
   else {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('PvP Quiz Server is running!');
+    res.end('PvP Quiz Server active.');
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`Server live at http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
