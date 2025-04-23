@@ -1,26 +1,25 @@
-id,question,correctAnswer
-q1,What is the capital of France?,Paris
-q2,What is 2 + 2?,4
-q3,Who wrote "1984"?,George Orwell
-q4,What is the smallest planet?,Mercury
-q5,What is the largest ocean?,Pacific
-q6,Which gas do plants absorb?,Carbon Dioxide
-q7,Who painted the Mona Lisa?,Leonardo da Vinci
-q8,What is the square root of 64?,8
-q9,What is the boiling point of water in Celsius?,100
-q10,What year did World War II end?,1945
-q11,What is the longest river?,Nile
-q12,Who discovered gravity?,Isaac Newton
-q13,What is the capital of Japan?,Tokyo
-q14,How many continents are there?,7
-q15,Which planet is known as the Red Planet?,Mars
-q16,What is the hardest natural substance?,Diamond
-q17,Which element has the symbol O?,Oxygen
-q18,What does HTTP stand for?,HyperText Transfer Protocol
-q19,Who wrote Hamlet?,William Shakespeare
-q20,What is the tallest mountain?,Everest
-q21,How many sides does a hexagon have?,6
-q22,What is the chemical formula for water?,H2O
-q23,Which language is primarily spoken in Brazil?,Portuguese
-q24,Who is the Greek god of the sea?,Poseidon
-q25,What is the largest mammal?,Blue Whale
+id,question,correctAnswer,option1,option2,option3,option4
+q1,What is 2 + 2?,4,1,2,3,4
+q2,Is fire hot?,True,True,False
+q3,Capital of France?,Paris,London,Berlin,Madrid,Paris
+q4,Which is a mammal?,Whale,Shark,Whale,Salmon,Tuna
+q5,Color of sky?,Blue,Red,Green,Blue,Yellow
+q6,Which gas do plants absorb?,Carbon Dioxide,Oxygen,Carbon Dioxide,Nitrogen,Hydrogen
+q7,First US President?,George Washington,Abraham Lincoln,George Washington,John Adams,Thomas Jefferson
+q8,Fastest land animal?,Cheetah,Lion,Elephant,Horse,Cheetah
+q9,Boiling point of water?,100,0,100,90,80
+q10,Greek god of the sea?,Poseidon,Zeus,Hades,Poseidon,Apollo
+q11,Hardest substance?,Diamond,Iron,Gold,Diamond,Glass
+q12,Number of continents?,7,5,6,7,8
+q13,What planet is red?,Mars,Venus,Saturn,Mars,Jupiter
+q14,Longest river?,Nile,Amazon,Nile,Mississippi,Yangtze
+q15,Atomic symbol for water?,H2O,O2,H2,H2O,CO2
+q16,Smallest planet?,Mercury,Earth,Mercury,Mars,Pluto
+q17,Primary Brazil language?,Portuguese,Spanish,Portuguese,French,Italian
+q18,Author of 1984?,George Orwell,George Orwell,Aldous Huxley,Ray Bradbury,JK Rowling
+q19,Which is prime?,7,4,6,7,8
+q20,Tallest mountain?,Everest,Everest,K2,Kilimanjaro,Denali
+q21,Element symbol O?,Oxygen,Hydrogen,Carbon,Oxygen,Nitrogen
+q22,HTTP full form?,HyperText Transfer Protocol,HighText Transfer Plot,HyperText Transfer Protocol,Hyperlinking Text Tech,Host Transfer Protocol
+q23,Shape with 6 sides?,Hexagon,Hexagon,Octagon,Pentagon,Heptagon
+q24,How many hours in day?,24,12,24,48,36
