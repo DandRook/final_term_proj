@@ -10,6 +10,8 @@ let currentQuestion = null;
 let currentQuestionStartTime = null;
 const rotationInterval = 60000;
 let playerQueue = [];
+let recentQuestions = [];
+const recentLimit = 5;
 
 // Load CSV and initialize first question synchronously
 fs.createReadStream('questions.csv')
@@ -20,17 +22,24 @@ fs.createReadStream('questions.csv')
     if (quizQuestions.length > 0) {
       rotateQuestion(); // Preload first question
       setInterval(rotateQuestion, rotationInterval);
-    } else {
-      console.error('No quiz questions loaded!');
     }
   });
 
-function rotateQuestion() {
-  currentQuestion = quizQuestions[Math.floor(Math.random() * quizQuestions.length)];
+const pool = quizQuestions.filter(q => !recentQuestions.includes(q.id));
+  const candidates = pool.length > 0 ? pool : quizQuestions;
+
+  currentQuestion = candidates[Math.floor(Math.random() * candidates.length)];
   currentQuestionStartTime = Date.now();
+
+  recentQuestions.push(currentQuestion.id);
+  if (recentQuestions.length > recentLimit) {
+    recentQuestions.shift();
+  }
+
   console.log(`New question: ${currentQuestion.question}`);
 }
 
+// playerque in case none available
 function matchPlayer(userId) {
   if (playerQueue.length > 0) {
     const opponentId = playerQueue.shift();
@@ -41,13 +50,9 @@ function matchPlayer(userId) {
   }
 }
 
+// Server code for next question & submit answer
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
-  
-  if (parsedUrl.pathname === '/ping') {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  return res.end(JSON.stringify({ status: 'alive' }));
-}
 
   if (parsedUrl.pathname === '/next-question' && req.method === 'GET') {
     const userId = parsedUrl.query.userId;
@@ -56,9 +61,9 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: 'Missing userId' }));
     }
 
-    if (!currentQuestion || !currentQuestionStartTime) {
+    if (!currentQuestion) {
       res.writeHead(503, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Questions not yet initialized' }));
+      return res.end(JSON.stringify({ error: 'Questions not ready yet' }));
     }
 
     const matchStatus = matchPlayer(userId);
@@ -68,10 +73,51 @@ const server = http.createServer((req, res) => {
       ...matchStatus,
       question: currentQuestion.question,
       questionId: currentQuestion.id,
+      options: [
+        currentQuestion.option1,
+        currentQuestion.option2,
+        currentQuestion.option3,
+        currentQuestion.option4
+      ].filter(Boolean),
       startTime: currentQuestionStartTime,
       deadline: currentQuestionStartTime + rotationInterval
     }));
-  } else {
+  }
+
+  else if (parsedUrl.pathname === '/submit-answer' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { userId, questionId, userAnswer } = JSON.parse(body);
+        if (!userId || !questionId || userAnswer == null) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ error: 'Missing fields' }));
+        }
+
+        const question = quizQuestions.find(q => q.id === questionId);
+        if (!question) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ error: 'Question not found' }));
+        }
+
+        const correct = question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ correct }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Server error' }));
+      }
+    });
+  }
+
+  else if (parsedUrl.pathname === '/ping') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ status: 'alive' }));
+  }
+
+  else {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('PvP Quiz Server is running!');
   }
