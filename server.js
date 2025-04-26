@@ -50,6 +50,7 @@ const server = http.createServer((req, res) => {
     const matchStatus = matchPlayer(userId);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
+    console.log(`Sending question: ${currentQuestion.question} to user: ${userId}`);
     res.end(JSON.stringify({
       ...matchStatus,
       question: currentQuestion.question,
