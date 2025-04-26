@@ -5,242 +5,210 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Locale;
 
 public class GameActivity extends AppCompatActivity {
-
-    private TextView questionText, timerText;
+    private static final String TAG = "GAME_ACTIVITY";
+    private TextView questionText, timerText, swipeHint;
     private Button[] optionButtons;
-    private String userId;
-
-    private String currentQuestionId;
-    private String currentQuestionText;
-    private long questionStartTime;
-
+    private Button nextButton;
+    private String questionId, selectedAnswer = "";
+    private long startTime;
+    private int questionCount = 0;
     private int correctCount = 0;
-    private int totalAnswered = 0;
-
-    private CountDownTimer matchTimer;
+    private final int MAX_QUESTIONS = 10;
+    private final int TOTAL_TIME = 30; // 2 minutes for entire game
+    private CountDownTimer totalGameTimer;
+    private FirebaseAuth mAuth;
+    private DatabaseReference dbRef;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.gameact);
 
-        userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        mAuth = FirebaseAuth.getInstance();
+        dbRef = FirebaseDatabase.getInstance().getReference("results");
 
         questionText = findViewById(R.id.question_text);
+        swipeHint = findViewById(R.id.swipe_hint);
         timerText = findViewById(R.id.timer_text);
+        nextButton = findViewById(R.id.next_question_button);
+
         optionButtons = new Button[]{
-                findViewById(R.id.option_button_1),
-                findViewById(R.id.option_button_2),
-                findViewById(R.id.option_button_3),
-                findViewById(R.id.option_button_4)
+                findViewById(R.id.option1),
+                findViewById(R.id.option2),
+                findViewById(R.id.option3),
+                findViewById(R.id.option4)
         };
 
-        for (Button btn : optionButtons) {
-            btn.setOnClickListener(view -> handleAnswer(btn.getText().toString()));
+        nextButton.setEnabled(false); // Disable at start
+
+        for (Button button : optionButtons) {
+            button.setOnClickListener(v -> {
+                for (Button b : optionButtons)
+                    b.setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
+                v.setBackgroundColor(getResources().getColor(android.R.color.holo_blue_light));
+                selectedAnswer = ((Button) v).getText().toString();
+                nextButton.setEnabled(true); // Enable after selection
+            });
         }
 
-        startMatchTimer();
+        nextButton.setOnClickListener(v -> {
+
+            finalizeAnswer();
+        });
+
+        startTotalTimer();
         fetchNextQuestion();
     }
 
-    private void startMatchTimer() {
-        matchTimer = new CountDownTimer(60000, 1000) {
+    private void fetchNextQuestion() {
+        if (questionCount >= MAX_QUESTIONS) {
+            showResultsDialog();
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                Log.d(TAG, "Calling /next-question API to fetch new question.");
+                URL url = new URL("https://final-term-proj.onrender.com/next-question?userId=" + mAuth.getUid());
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+
+                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                String response = in.readLine();
+                in.close();
+
+                JSONObject json = new JSONObject(response);
+                questionId = json.getString("questionId");
+                String question = json.getString("question");
+
+                JSONArray optsArray = json.getJSONArray("options");
+                String[] options = new String[4];
+                for (int i = 0; i < 4; i++) {
+                    options[i] = i < optsArray.length() ? optsArray.getString(i) : "";
+                }
+
+                runOnUiThread(() -> {
+                    questionText.setText(question);
+                    swipeHint.setText("Tap an option, then tap Next");
+                    for (int i = 0; i < optionButtons.length; i++) {
+                        optionButtons[i].setVisibility(options[i].isEmpty() ? View.GONE : View.VISIBLE);
+                        optionButtons[i].setText(options[i]);
+                        optionButtons[i].setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
+                    }
+                    selectedAnswer = "";
+                    nextButton.setEnabled(false); // Lock again until new selection
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    private void startTotalTimer() {
+        totalGameTimer = new CountDownTimer(TOTAL_TIME * 1000L, 1000) {
             public void onTick(long millisUntilFinished) {
-                timerText.setText("Time: " + millisUntilFinished / 1000 + "s");
+                timerText.setText(String.format(Locale.getDefault(), "%ds", millisUntilFinished / 1000));
             }
 
             public void onFinish() {
-                Toast.makeText(GameActivity.this, "Match Over!", Toast.LENGTH_SHORT).show();
                 showResultsDialog();
             }
         }.start();
     }
 
-    private void fetchNextQuestion() {
-        runOnUiThread(() -> {
-            questionText.setText("Loading...");
-            for (Button btn : optionButtons) {
-                btn.setEnabled(false);
-                btn.setVisibility(Button.GONE);
-            }
-        });
+    private void finalizeAnswer() {
+        if (selectedAnswer.isEmpty()) return;
 
+        questionCount++;
+        long timeSpent = (System.currentTimeMillis() - startTime) / 1000;
+        String userId = mAuth.getCurrentUser() != null ? mAuth.getCurrentUser().getUid() : "unknown";
+        // NEW: Submit the answer to the server
         new Thread(() -> {
             try {
-                URL url = new URL("https://final-term-proj.onrender.com/next-question?userId=" + userId);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
+                URL url = new URL("https://final-term-proj.onrender.com/submit-answer");
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("Content-Type", "application/json; utf-8");
+                connection.setDoOutput(true);
 
-                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = in.readLine()) != null) response.append(line);
+                JSONObject postData = new JSONObject();
+                postData.put("userId", userId);
+                postData.put("questionId", questionId);
+                postData.put("userAnswer", selectedAnswer);
+
+                connection.getOutputStream().write(postData.toString().getBytes("utf-8"));
+
+                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                String response = in.readLine();
                 in.close();
 
-                JSONObject json = new JSONObject(response.toString());
-                currentQuestionId = json.getString("questionId");
-                currentQuestionText = json.getString("question");
-                JSONArray optionsArray = json.getJSONArray("options");
+                JSONObject jsonResponse = new JSONObject(response);
+                boolean isCorrect = jsonResponse.getBoolean("correct");
 
-                questionStartTime = System.currentTimeMillis();
+                if (isCorrect) correctCount++;
+
+                // Always log the answer in Firebase
+                DatabaseReference userRef = dbRef.child(userId).push();
+                userRef.setValue(new QuestionLog(questionId, selectedAnswer, timeSpent, isCorrect))
+                        .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "Logged"))
+                        .addOnFailureListener(e -> Log.e("FIREBASE", "Logging failed", e));
 
                 runOnUiThread(() -> {
-                    questionText.setText(currentQuestionText);
-                    for (int i = 0; i < optionButtons.length; i++) {
-                        if (i < optionsArray.length()) {
-                            try {
-                                optionButtons[i].setText(optionsArray.getString(i));
-                            } catch (JSONException e) {
-                                throw new RuntimeException(e);
-                            }
-                            optionButtons[i].setVisibility(Button.VISIBLE);
-                            optionButtons[i].setEnabled(true);
-                        } else {
-                            optionButtons[i].setVisibility(Button.GONE);
-                        }
-                    }
+                    selectedAnswer = "";
+                    fetchNextQuestion();
                 });
 
             } catch (Exception e) {
                 e.printStackTrace();
-                runOnUiThread(() -> Toast.makeText(GameActivity.this, "Failed to load question", Toast.LENGTH_SHORT).show());
             }
         }).start();
-    }
-
-    private void handleAnswer(String userAnswer) {
-        long timeSpent = System.currentTimeMillis() - questionStartTime;
-        totalAnswered++;
-
-        submitAnswer(userAnswer, isCorrect -> {
-            if (isCorrect) correctCount++;
-            logAnswerToFirebase(userAnswer, timeSpent, isCorrect);
-            fetchNextQuestion();
-        });
-    }
-
-    private void submitAnswer(String userAnswer, AnswerCallback callback) {
-        new Thread(() -> {
-            try {
-                URL url = new URL("https://final-term-proj.onrender.com/submit-answer");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setRequestProperty("Content-Type", "application/json");
-                conn.setDoOutput(true);
-
-                String payload = new JSONObject()
-                        .put("userId", userId)
-                        .put("questionId", currentQuestionId)
-                        .put("userAnswer", userAnswer)
-                        .toString();
-
-                conn.getOutputStream().write(payload.getBytes());
-
-                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder result = new StringBuilder();
-                String line;
-                while ((line = in.readLine()) != null) result.append(line);
-                in.close();
-
-                JSONObject response = new JSONObject(result.toString());
-                boolean correct = response.getBoolean("correct");
-
-                runOnUiThread(() -> callback.onResult(correct));
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                runOnUiThread(() -> Toast.makeText(GameActivity.this, "Error submitting answer", Toast.LENGTH_SHORT).show());
-            }
-        }).start();
-    }
-
-    private void logAnswerToFirebase(String userAnswer, long timeSpent, boolean isCorrect) {
-        String timeStamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                .format(new Date());
-
-        FirebaseDatabase.getInstance().getReference("user_data")
-                .child(userId)
-                .child("answers")
-                .push()
-                .setValue(new AnswerData(
-                        currentQuestionId,
-                        currentQuestionText,
-                        userAnswer,
-                        isCorrect,
-                        timeSpent,
-                        timeStamp
-                ))
-                .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "Answer logged!"))
-                .addOnFailureListener(e -> Log.e("FIREBASE", "Failed to log answer", e));
     }
 
     private void showResultsDialog() {
-        double percentCorrect = totalAnswered == 0 ? 0 : (correctCount * 100.0) / totalAnswered;
-        String message = "Match Complete!\n\n" +
-                "Answered: " + totalAnswered + "\n" +
-                "Correct: " + correctCount + "\n" +
-                "Accuracy: " + String.format(Locale.getDefault(), "%.1f", percentCorrect) + "%";
+        if (isFinishing()) return;
+        totalGameTimer.cancel();
 
+        int percentCorrect = (int) ((correctCount / (float) MAX_QUESTIONS) * 100);
         new AlertDialog.Builder(this)
-                .setTitle("Results")
-                .setMessage(message)
+                .setTitle("Game Over")
+                .setMessage("Correct: " + correctCount + "/" + MAX_QUESTIONS + "\nAccuracy: " + percentCorrect + "%")
+                .setPositiveButton("OK", (dialog, which) -> {
+                    startActivity(new Intent(GameActivity.this, MainActivity.class));
+                    finish();
+                })
                 .setCancelable(false)
-                .setPositiveButton("OK", (dialog, which) -> goToMainWithResults())
                 .show();
     }
 
-    private void goToMainWithResults() {
-        Intent intent = new Intent(GameActivity.this, MainActivity.class);
-        intent.putExtra("correct", correctCount);
-        intent.putExtra("total", totalAnswered);
-        startActivity(intent);
-        finish();
-    }
+    static class QuestionLog {
+        public String questionId, selected;
 
-    public interface AnswerCallback {
-        void onResult(boolean isCorrect);
-    }
+        public QuestionLog() {}
 
-    public static class AnswerData {
-        public String questionId;
-        public String question;
-        public String userAnswer;
-        public boolean correct;
-        public long timeSpentMs;
-        public String answeredAt;
-
-        public AnswerData() {}
-
-        public AnswerData(String questionId, String question, String userAnswer, boolean correct,
-                          long timeSpentMs, String answeredAt) {
+        public QuestionLog(String questionId, String selected, long timeSpent, boolean isCorrect) {
             this.questionId = questionId;
-            this.question = question;
-            this.userAnswer = userAnswer;
-            this.correct = correct;
-            this.timeSpentMs = timeSpentMs;
-            this.answeredAt = answeredAt;
+            this.selected = selected;
         }
     }
 }
