@@ -1,4 +1,4 @@
-//server.js
+// server.js
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
@@ -8,9 +8,10 @@ const PORT = process.env.PORT || 3000;
 let quizQuestions = [];
 let currentQuestion = null;
 let currentQuestionStartTime = null;
-const rotationInterval = 60000;
+const rotationInterval = 60000; // 60 seconds
 let playerQueue = [];
 
+// Load CSV questions at startup
 fs.createReadStream('questions.csv')
   .pipe(csv())
   .on('data', (row) => quizQuestions.push(row))
@@ -20,6 +21,7 @@ fs.createReadStream('questions.csv')
     setInterval(rotateQuestion, rotationInterval);
   });
 
+// Pick random question
 function rotateQuestion() {
   const index = Math.floor(Math.random() * quizQuestions.length);
   currentQuestion = quizQuestions[index];
@@ -27,6 +29,7 @@ function rotateQuestion() {
   console.log(`Rotated question: ${currentQuestion.question}`);
 }
 
+// Matchmaking placeholder
 function matchPlayer(userId) {
   if (playerQueue.length > 0) {
     const opponentId = playerQueue.shift();
@@ -37,6 +40,7 @@ function matchPlayer(userId) {
   }
 }
 
+// Create HTTP server
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
 
@@ -47,10 +51,12 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ error: 'Missing userId' }));
     }
 
+    // Always rotate a new question when client requests next
+    rotateQuestion();
+
     const matchStatus = matchPlayer(userId);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    console.log(`Sending question: ${currentQuestion.question} to user: ${userId}`);
     res.end(JSON.stringify({
       ...matchStatus,
       question: currentQuestion.question,
@@ -97,6 +103,7 @@ const server = http.createServer((req, res) => {
   }
 });
 
+// Start server
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
