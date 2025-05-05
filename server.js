@@ -8,10 +8,10 @@ const PORT = process.env.PORT || 3000;
 let quizQuestions = [];
 let currentQuestion = null;
 let currentQuestionStartTime = null;
-const rotationInterval = 60000; // 60 seconds
+const rotationInterval = 60000;
 let playerQueue = [];
 
-// Load CSV questions at startup
+// Load questions from CSV
 fs.createReadStream('questions.csv')
   .pipe(csv())
   .on('data', (row) => quizQuestions.push(row))
@@ -21,7 +21,7 @@ fs.createReadStream('questions.csv')
     setInterval(rotateQuestion, rotationInterval);
   });
 
-// Pick random question
+// Pick a random question every rotationInterval
 function rotateQuestion() {
   const index = Math.floor(Math.random() * quizQuestions.length);
   currentQuestion = quizQuestions[index];
@@ -29,7 +29,7 @@ function rotateQuestion() {
   console.log(`Rotated question: ${currentQuestion.question}`);
 }
 
-// Matchmaking placeholder
+// Manage player matchmaking queue for 1v1
 function matchPlayer(userId) {
   if (playerQueue.length > 0) {
     const opponentId = playerQueue.shift();
@@ -40,25 +40,49 @@ function matchPlayer(userId) {
   }
 }
 
-// Create HTTP server
+// HTTP Server
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
 
   if (parsedUrl.pathname === '/next-question' && req.method === 'GET') {
     const userId = parsedUrl.query.userId;
+    const mode = parsedUrl.query.mode || "single"; // support ?mode=1v1
+
     if (!userId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Missing userId' }));
     }
 
-    // Always rotate a new question when client requests next
-    rotateQuestion();
+    if (mode === "single") {
+      console.log(`Single mode - sending question to ${userId}`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        status: 'ready',
+        question: currentQuestion.question,
+        questionId: currentQuestion.id,
+        options: [
+          currentQuestion.option1,
+          currentQuestion.option2,
+          currentQuestion.option3,
+          currentQuestion.option4
+        ].filter(Boolean),
+        startTime: currentQuestionStartTime,
+        deadline: currentQuestionStartTime + rotationInterval
+      }));
+    }
 
     const matchStatus = matchPlayer(userId);
+    if (matchStatus.status === 'waiting') {
+      console.log(`1v1 mode - ${userId} is waiting for an opponent`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ status: 'waiting' }));
+    }
 
+    console.log(`1v1 mode - Matched ${userId} vs ${matchStatus.opponentId}`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      ...matchStatus,
+      status: 'matched',
+      opponentId: matchStatus.opponentId,
       question: currentQuestion.question,
       questionId: currentQuestion.id,
       options: [
@@ -103,7 +127,6 @@ const server = http.createServer((req, res) => {
   }
 });
 
-// Start server
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
