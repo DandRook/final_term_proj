@@ -1,77 +1,104 @@
-// server.js
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
 const csv = require('csv-parser');
 
 const PORT = process.env.PORT || 3000;
-let quizQuestions = [];
-let playerQueue = [];
-let userCurrentQuestion = {}; // Tracks per-user question
+const rotationInterval = 60000;
 
-// Load CSV
+let quizQuestions = [];
+let currentQuestion = null;
+let currentQuestionStartTime = null;
+
+let playerQueue = [];
+
 fs.createReadStream('questions.csv')
   .pipe(csv())
-  .on('data', (row) => quizQuestions.push(row))
+  .on('data', row => quizQuestions.push(row))
   .on('end', () => {
     console.log(`Loaded ${quizQuestions.length} questions`);
+    rotateQuestion();
+    setInterval(rotateQuestion, rotationInterval);
   });
 
+function rotateQuestion() {
+  const index = Math.floor(Math.random() * quizQuestions.length);
+  currentQuestion = quizQuestions[index];
+  currentQuestionStartTime = Date.now();
+  console.log(`Rotated question: ${currentQuestion.question}`);
+}
+
 function matchPlayer(userId) {
-  if (playerQueue.length > 0 && playerQueue[0] !== userId) {
+  if (playerQueue.includes(userId)) return { status: 'waiting' };
+
+  if (playerQueue.length > 0) {
     const opponentId = playerQueue.shift();
     return { status: 'matched', opponentId };
   } else {
-    if (!playerQueue.includes(userId)) playerQueue.push(userId);
+    playerQueue.push(userId);
     return { status: 'waiting' };
   }
 }
 
-function getRandomQuestion() {
-  const index = Math.floor(Math.random() * quizQuestions.length);
-  return quizQuestions[index];
-}
-
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
+  const { pathname, query } = parsedUrl;
 
-  if (parsedUrl.pathname === '/next-question' && req.method === 'GET') {
-    const userId = parsedUrl.query.userId;
+  if (pathname === '/next-question' && req.method === 'GET') {
+    const userId = query.userId;
+    const mode = query.mode || 'single';
+
     if (!userId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Missing userId' }));
     }
 
-    const matchStatus = matchPlayer(userId);
-    if (matchStatus.status === 'waiting') {
+    if (mode === '1v1') {
+      const matchStatus = matchPlayer(userId);
+
+      if (matchStatus.status === 'waiting') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'waiting' }));
+      }
+
+      console.log(`Sending question: ${currentQuestion.question} to user: ${userId} (1v1)`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ status: 'waiting' }));
+      return res.end(JSON.stringify({
+        status: 'matched',
+        opponentId: matchStatus.opponentId,
+        question: currentQuestion.question,
+        questionId: currentQuestion.id,
+        options: [
+          currentQuestion.option1,
+          currentQuestion.option2,
+          currentQuestion.option3,
+          currentQuestion.option4
+        ].filter(Boolean),
+        startTime: currentQuestionStartTime,
+        deadline: currentQuestionStartTime + rotationInterval
+      }));
     }
 
-    if (!userCurrentQuestion[userId]) {
-      userCurrentQuestion[userId] = getRandomQuestion();
-    }
-
-    const currentQuestion = userCurrentQuestion[userId];
-    console.log(`Sending question: ${currentQuestion.question} to user: ${userId}`);
-
+    // SINGLE player mode
+    const singleQ = quizQuestions[Math.floor(Math.random() * quizQuestions.length)];
+    console.log(`Sending single question: ${singleQ.question} to user: ${userId}`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
+    return res.end(JSON.stringify({
       status: 'matched',
-      opponentId: matchStatus.opponentId,
-      question: currentQuestion.question,
-      questionId: currentQuestion.id,
-      correctAnswer: currentQuestion.correctAnswer,
+      question: singleQ.question,
+      questionId: singleQ.id,
       options: [
-        currentQuestion.option1,
-        currentQuestion.option2,
-        currentQuestion.option3,
-        currentQuestion.option4
-      ].filter(Boolean)
+        singleQ.option1,
+        singleQ.option2,
+        singleQ.option3,
+        singleQ.option4
+      ].filter(Boolean),
+      startTime: Date.now(),
+      deadline: Date.now() + rotationInterval
     }));
   }
 
-  else if (parsedUrl.pathname === '/submit-answer' && req.method === 'POST') {
+  else if (pathname === '/submit-answer' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -81,7 +108,6 @@ const server = http.createServer((req, res) => {
         if (!question) throw new Error("Invalid question");
 
         const correct = question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase();
-        delete userCurrentQuestion[userId];
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ correct }));
@@ -90,6 +116,11 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: e.message }));
       }
     });
+  }
+
+  else if (pathname === '/ping') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'online' }));
   }
 
   else {
