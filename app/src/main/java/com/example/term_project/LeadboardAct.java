@@ -45,7 +45,7 @@ public class LeadboardAct extends AppCompatActivity {
         leaderboardList.setAdapter(adapter);
 
 
-        databaseReference = FirebaseDatabase.getInstance().getReference("user_data");
+        databaseReference = FirebaseDatabase.getInstance().getReference("results");
         loadLeaderboardData();
     }
     private void loadLeaderboardData() {
@@ -56,9 +56,8 @@ public class LeadboardAct extends AppCompatActivity {
 
                 for (DataSnapshot userSnapshot : snapshot.getChildren()) {
                     int correct = 0;
-                    DataSnapshot answers = userSnapshot.child("answers");
-                    for (DataSnapshot answer : answers.getChildren()) {
-                        Boolean isCorrect = answer.child("correct").getValue(Boolean.class);
+                    for (DataSnapshot answer : userSnapshot.getChildren()) {
+                        Boolean isCorrect = answer.child("isCorrect").getValue(Boolean.class);
                         if (isCorrect != null && isCorrect) {
                             correct++;
                         }
@@ -77,6 +76,7 @@ public class LeadboardAct extends AppCompatActivity {
             }
         });
     }
+
 
     static class LeaderboardEntry {
         String username;

@@ -2,48 +2,43 @@ package com.example.term_project;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.Button;
-import android.widget.TextView;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.FirebaseAuth;
 
 public class MainActivity extends AppCompatActivity {
-
-    private Button startGameButton, leaderboardButton, logoutButton;
-    private TextView welcomeTextView;
-    private String uId;
+    private FirebaseAuth mAuth;
+    private RadioGroup modeSelector;
+    private Button startGameButton, logoutButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        uId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        mAuth = FirebaseAuth.getInstance();
+        modeSelector = findViewById(R.id.mode_selector);
+        startGameButton = findViewById(R.id.button_start_game);
+        logoutButton = findViewById(R.id.button_logout);
 
-        startGameButton = findViewById(R.id.start_game_button);
-        leaderboardButton = findViewById(R.id.leaderboard_button);
-        logoutButton = findViewById(R.id.return_button);
-        welcomeTextView = findViewById(R.id.swipe_area);
+        startGameButton.setOnClickListener(v -> {
+            int selectedId = modeSelector.getCheckedRadioButtonId();
+            String mode = "single"; // default fallback
 
-        welcomeTextView.setText("Welcome to PvP Quiz!");
+            if (selectedId == R.id.radio_1v1) mode = "1v1";
 
-        startGameButton.setOnClickListener(view -> {
             Intent intent = new Intent(MainActivity.this, GameActivity.class);
+            intent.putExtra("mode", mode);
             startActivity(intent);
         });
 
-        leaderboardButton.setOnClickListener(view -> {
-            Intent intent = new Intent(MainActivity.this, LeadboardAct.class);
-            startActivity(intent);
-        });
-
-        logoutButton.setOnClickListener(view -> {
-            FirebaseAuth.getInstance().signOut();
-            Intent intent = new Intent(MainActivity.this, Login.class);
-            startActivity(intent);
+        logoutButton.setOnClickListener(v -> {
+            mAuth.signOut();
+            startActivity(new Intent(MainActivity.this, Login.class));
             finish();
         });
     }

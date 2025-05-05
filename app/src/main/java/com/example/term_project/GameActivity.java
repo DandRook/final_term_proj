@@ -4,6 +4,8 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -20,24 +22,31 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
 
 public class GameActivity extends AppCompatActivity {
     private static final String TAG = "GAME_ACTIVITY";
-    private TextView questionText, timerText, swipeHint;
+
+    private TextView questionText, timerText;
     private Button[] optionButtons;
     private Button nextButton;
+
     private String questionId, selectedAnswer = "";
-    private long startTime;
     private int questionCount = 0;
-    private int correctCount = 0;
+    private long startTime;
+
     private final int MAX_QUESTIONS = 10;
-    private final int TOTAL_TIME = 30; // 2 minutes for entire game
-    private CountDownTimer totalGameTimer;
+    private final int TOTAL_GAME_TIME = 60000;
+
+    private CountDownTimer gameTimer;
+    private boolean gameTimerStarted = false;
+
     private FirebaseAuth mAuth;
     private DatabaseReference dbRef;
+    private String gameMode = "single";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,8 +56,9 @@ public class GameActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         dbRef = FirebaseDatabase.getInstance().getReference("results");
 
+        gameMode = getIntent().getStringExtra("mode");
+
         questionText = findViewById(R.id.question_text);
-        swipeHint = findViewById(R.id.swipe_hint);
         timerText = findViewById(R.id.timer_text);
         nextButton = findViewById(R.id.next_question_button);
 
@@ -59,82 +69,81 @@ public class GameActivity extends AppCompatActivity {
                 findViewById(R.id.option4)
         };
 
-        nextButton.setEnabled(false); // Disable at start
-
         for (Button button : optionButtons) {
             button.setOnClickListener(v -> {
                 for (Button b : optionButtons)
                     b.setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
                 v.setBackgroundColor(getResources().getColor(android.R.color.holo_blue_light));
                 selectedAnswer = ((Button) v).getText().toString();
-                nextButton.setEnabled(true); // Enable after selection
+                nextButton.setEnabled(true);
             });
         }
 
-        nextButton.setOnClickListener(v -> {
+        nextButton.setOnClickListener(v -> finalizeAnswer());
 
-            finalizeAnswer();
-        });
-
-        startTotalTimer();
         fetchNextQuestion();
     }
 
     private void fetchNextQuestion() {
         if (questionCount >= MAX_QUESTIONS) {
-            showResultsDialog();
+            runOnUiThread(this::showResultsDialog);
             return;
         }
 
         new Thread(() -> {
             try {
-                Log.d(TAG, "Calling /next-question API to fetch new question.");
-                URL url = new URL("https://final-term-proj.onrender.com/next-question?userId=" + mAuth.getUid());
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
+                String userId = mAuth.getUid();
+                URL url = new URL("https://final-term-proj.onrender.com/next-question?userId=" + userId + "&mode=" + gameMode);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
 
-                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 String response = in.readLine();
                 in.close();
 
                 JSONObject json = new JSONObject(response);
+                String status = json.getString("status");
+
+                if (status.equals("waiting")) {
+                    runOnUiThread(() -> {
+                        questionText.setText("Waiting for opponent...");
+                        timerText.setText("...");
+                        nextButton.setEnabled(false);
+                    });
+                    new Handler(Looper.getMainLooper()).postDelayed(this::fetchNextQuestion, 2000);
+                    return;
+                }
+
                 questionId = json.getString("questionId");
                 String question = json.getString("question");
-
                 JSONArray optsArray = json.getJSONArray("options");
                 String[] options = new String[4];
                 for (int i = 0; i < 4; i++) {
                     options[i] = i < optsArray.length() ? optsArray.getString(i) : "";
                 }
 
+                startTime = System.currentTimeMillis();
+
                 runOnUiThread(() -> {
                     questionText.setText(question);
-                    swipeHint.setText("Tap an option, then tap Next");
                     for (int i = 0; i < optionButtons.length; i++) {
                         optionButtons[i].setVisibility(options[i].isEmpty() ? View.GONE : View.VISIBLE);
                         optionButtons[i].setText(options[i]);
                         optionButtons[i].setBackgroundColor(getResources().getColor(android.R.color.darker_gray));
                     }
                     selectedAnswer = "";
-                    nextButton.setEnabled(false); // Lock again until new selection
+                    nextButton.setEnabled(false);
+
+                    if (!gameTimerStarted) {
+                        startGameTimer();
+                        gameTimerStarted = true;
+                    }
                 });
 
             } catch (Exception e) {
-                e.printStackTrace();
+                Log.e(TAG, "Error fetching question", e);
             }
         }).start();
-    }
-
-    private void startTotalTimer() {
-        totalGameTimer = new CountDownTimer(TOTAL_TIME * 1000L, 1000) {
-            public void onTick(long millisUntilFinished) {
-                timerText.setText(String.format(Locale.getDefault(), "%ds", millisUntilFinished / 1000));
-            }
-
-            public void onFinish() {
-                showResultsDialog();
-            }
-        }.start();
     }
 
     private void finalizeAnswer() {
@@ -142,57 +151,58 @@ public class GameActivity extends AppCompatActivity {
 
         questionCount++;
         long timeSpent = (System.currentTimeMillis() - startTime) / 1000;
-        String userId = mAuth.getCurrentUser() != null ? mAuth.getCurrentUser().getUid() : "unknown";
-        // NEW: Submit the answer to the server
+        String userId = mAuth.getUid();
+
+        DatabaseReference userRef = dbRef.child(userId).push();
+        userRef.setValue(new QuestionLog(questionId, selectedAnswer, timeSpent));
+
+        sendAnswerToServer(userId, questionId, selectedAnswer);
+
+        fetchNextQuestion();
+    }
+
+    private void sendAnswerToServer(String userId, String qid, String answer) {
         new Thread(() -> {
             try {
                 URL url = new URL("https://final-term-proj.onrender.com/submit-answer");
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("POST");
-                connection.setRequestProperty("Content-Type", "application/json; utf-8");
-                connection.setDoOutput(true);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
 
-                JSONObject postData = new JSONObject();
-                postData.put("userId", userId);
-                postData.put("questionId", questionId);
-                postData.put("userAnswer", selectedAnswer);
+                JSONObject body = new JSONObject();
+                body.put("userId", userId);
+                body.put("questionId", qid);
+                body.put("userAnswer", answer);
 
-                connection.getOutputStream().write(postData.toString().getBytes("utf-8"));
+                OutputStream os = conn.getOutputStream();
+                os.write(body.toString().getBytes());
+                os.flush();
+                os.close();
 
-                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                String response = in.readLine();
-                in.close();
-
-                JSONObject jsonResponse = new JSONObject(response);
-                boolean isCorrect = jsonResponse.getBoolean("correct");
-
-                if (isCorrect) correctCount++;
-
-                // Always log the answer in Firebase
-                DatabaseReference userRef = dbRef.child(userId).push();
-                userRef.setValue(new QuestionLog(questionId, selectedAnswer, timeSpent, isCorrect))
-                        .addOnSuccessListener(aVoid -> Log.d("FIREBASE", "Logged"))
-                        .addOnFailureListener(e -> Log.e("FIREBASE", "Logging failed", e));
-
-                runOnUiThread(() -> {
-                    selectedAnswer = "";
-                    fetchNextQuestion();
-                });
+                int code = conn.getResponseCode();
+                Log.d(TAG, "Submit HTTP code: " + code);
+                if (code >= 200 && code < 300) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    String result = in.readLine();
+                    in.close();
+                    Log.d(TAG, "submit-answer response: " + result);
+                } else {
+                    Log.e(TAG, "Submit failed with HTTP code: " + code);
+                }
 
             } catch (Exception e) {
-                e.printStackTrace();
+                Log.e(TAG, "Submit error", e);
             }
         }).start();
     }
 
     private void showResultsDialog() {
         if (isFinishing()) return;
-        totalGameTimer.cancel();
 
-        int percentCorrect = (int) ((correctCount / (float) MAX_QUESTIONS) * 100);
         new AlertDialog.Builder(this)
                 .setTitle("Game Over")
-                .setMessage("Correct: " + correctCount + "/" + MAX_QUESTIONS + "\nAccuracy: " + percentCorrect + "%")
+                .setMessage("You answered " + questionCount + " questions.")
                 .setPositiveButton("OK", (dialog, which) -> {
                     startActivity(new Intent(GameActivity.this, MainActivity.class));
                     finish();
@@ -201,14 +211,29 @@ public class GameActivity extends AppCompatActivity {
                 .show();
     }
 
+    private void startGameTimer() {
+        gameTimer = new CountDownTimer(TOTAL_GAME_TIME, 1000) {
+            public void onTick(long millisUntilFinished) {
+                timerText.setText(String.format(Locale.getDefault(), "%ds", millisUntilFinished / 1000));
+            }
+
+            public void onFinish() {
+                showResultsDialog();
+            }
+        };
+        gameTimer.start();
+    }
+
     static class QuestionLog {
         public String questionId, selected;
+        public long timeSpent;
 
         public QuestionLog() {}
 
-        public QuestionLog(String questionId, String selected, long timeSpent, boolean isCorrect) {
+        public QuestionLog(String questionId, String selected, long timeSpent) {
             this.questionId = questionId;
             this.selected = selected;
+            this.timeSpent = timeSpent;
         }
     }
 }
