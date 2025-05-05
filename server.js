@@ -6,93 +6,68 @@ const csv = require('csv-parser');
 
 const PORT = process.env.PORT || 3000;
 let quizQuestions = [];
-let currentQuestion = null;
-let currentQuestionStartTime = null;
-const rotationInterval = 60000;
 let playerQueue = [];
+let userCurrentQuestion = {}; // Tracks per-user question
 
-// Load questions from CSV
+// Load CSV
 fs.createReadStream('questions.csv')
   .pipe(csv())
   .on('data', (row) => quizQuestions.push(row))
   .on('end', () => {
     console.log(`Loaded ${quizQuestions.length} questions`);
-    rotateQuestion();
-    setInterval(rotateQuestion, rotationInterval);
   });
 
-// Pick a random question every rotationInterval
-function rotateQuestion() {
-  const index = Math.floor(Math.random() * quizQuestions.length);
-  currentQuestion = quizQuestions[index];
-  currentQuestionStartTime = Date.now();
-  console.log(`Rotated question: ${currentQuestion.question}`);
-}
-
-// Manage player matchmaking queue for 1v1
 function matchPlayer(userId) {
-  if (playerQueue.length > 0) {
+  if (playerQueue.length > 0 && playerQueue[0] !== userId) {
     const opponentId = playerQueue.shift();
     return { status: 'matched', opponentId };
   } else {
-    playerQueue.push(userId);
+    if (!playerQueue.includes(userId)) playerQueue.push(userId);
     return { status: 'waiting' };
   }
 }
 
-// HTTP Server
+function getRandomQuestion() {
+  const index = Math.floor(Math.random() * quizQuestions.length);
+  return quizQuestions[index];
+}
+
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
 
   if (parsedUrl.pathname === '/next-question' && req.method === 'GET') {
     const userId = parsedUrl.query.userId;
-    const mode = parsedUrl.query.mode || "single"; // support ?mode=1v1
-
     if (!userId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Missing userId' }));
     }
 
-    if (mode === "single") {
-      console.log(`Single mode - sending question to ${userId}`);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({
-        status: 'ready',
-        question: currentQuestion.question,
-        questionId: currentQuestion.id,
-        options: [
-          currentQuestion.option1,
-          currentQuestion.option2,
-          currentQuestion.option3,
-          currentQuestion.option4
-        ].filter(Boolean),
-        startTime: currentQuestionStartTime,
-        deadline: currentQuestionStartTime + rotationInterval
-      }));
-    }
-
     const matchStatus = matchPlayer(userId);
     if (matchStatus.status === 'waiting') {
-      console.log(`1v1 mode - ${userId} is waiting for an opponent`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ status: 'waiting' }));
     }
 
-    console.log(`1v1 mode - Matched ${userId} vs ${matchStatus.opponentId}`);
+    if (!userCurrentQuestion[userId]) {
+      userCurrentQuestion[userId] = getRandomQuestion();
+    }
+
+    const currentQuestion = userCurrentQuestion[userId];
+    console.log(`Sending question: ${currentQuestion.question} to user: ${userId}`);
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'matched',
       opponentId: matchStatus.opponentId,
       question: currentQuestion.question,
       questionId: currentQuestion.id,
+      correctAnswer: currentQuestion.correctAnswer,
       options: [
         currentQuestion.option1,
         currentQuestion.option2,
         currentQuestion.option3,
         currentQuestion.option4
-      ].filter(Boolean),
-      startTime: currentQuestionStartTime,
-      deadline: currentQuestionStartTime + rotationInterval
+      ].filter(Boolean)
     }));
   }
 
@@ -106,6 +81,7 @@ const server = http.createServer((req, res) => {
         if (!question) throw new Error("Invalid question");
 
         const correct = question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase();
+        delete userCurrentQuestion[userId];
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ correct }));
@@ -114,11 +90,6 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: e.message }));
       }
     });
-  }
-
-  else if (parsedUrl.pathname === '/ping') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'online' }));
   }
 
   else {
