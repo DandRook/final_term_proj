@@ -5,11 +5,12 @@ const csv = require('csv-parser');
 
 const PORT = process.env.PORT || 3000;
 
-const quizQuestions = [];
-const playerQueue = [];
-const matchMap = new Map();           // userId => opponentId
-const playerQuestions = new Map();    // userId => currentQuestion
+const quizQuestions = [];             // Loaded quiz questions from CSV
+const playerQueue = [];               // Queue for waiting players in 1v1 mode
+const matchMap = new Map();           // Maps userId => opponentId
+const playerQuestions = new Map();    // Maps userId => assigned question (only for 1v1 mode)
 
+// Load questions from CSV file into memory
 fs.createReadStream('questions.csv')
   .pipe(csv())
   .on('data', (row) => quizQuestions.push(row))
@@ -17,11 +18,13 @@ fs.createReadStream('questions.csv')
     console.log(`Loaded ${quizQuestions.length} questions`);
   });
 
+// Select a random question from the quiz
 function getRandomQuestion() {
   const index = Math.floor(Math.random() * quizQuestions.length);
   return quizQuestions[index];
 }
 
+// Handles matchmaking logic for 1v1 mode
 function matchPlayer(userId) {
   if (matchMap.has(userId)) {
     return { status: 'matched', opponentId: matchMap.get(userId) };
@@ -35,23 +38,26 @@ function matchPlayer(userId) {
   }
 
   if (!playerQueue.includes(userId)) {
-    playerQueue.push(userId);
+    playerQueue.push(userId); // Wait in queue
   }
 
   return { status: 'waiting' };
 }
 
+// Core HTTP server handling quiz logic
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const userId = parsedUrl.query.userId;
   const mode = parsedUrl.query.mode || 'single';
 
+  // === Request for a new question ===
   if (parsedUrl.pathname === '/next-question' && req.method === 'GET') {
     if (!userId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'Missing userId' }));
     }
 
+    // === Single-player mode ===
     if (mode === 'single') {
       const q = getRandomQuestion();
       console.log(`Sending single question: ${q.question} to user: ${userId}`);
@@ -72,6 +78,7 @@ const server = http.createServer((req, res) => {
         return res.end(JSON.stringify({ status: 'waiting' }));
       }
 
+      // Assign a new question only if not already assigned
       if (!playerQuestions.has(userId)) {
         const q = getRandomQuestion();
         playerQuestions.set(userId, q);
@@ -90,6 +97,7 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  // === Answer submission handler ===
   else if (parsedUrl.pathname === '/submit-answer' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -99,8 +107,10 @@ const server = http.createServer((req, res) => {
         const question = quizQuestions.find(q => q.id === questionId);
         if (!question) throw new Error("Invalid question");
 
+        // Check if answer is correct (case-insensitive)
         const correct = question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase();
 
+        // Clean up the question state in 1v1 mode
         if (mode === '1v1') {
           const q = playerQuestions.get(userId);
           if (q && q.id === questionId) {
@@ -118,12 +128,14 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // === Default route ===
   else {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('PvP Quiz Server active.');
   }
 });
 
+// Start the server
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
