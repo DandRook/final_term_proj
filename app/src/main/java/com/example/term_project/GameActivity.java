@@ -37,8 +37,6 @@ public class GameActivity extends AppCompatActivity {
     private String questionId, selectedAnswer = "";
     private int questionCount = 0;
     private long startTime;
-
-    private final int MAX_QUESTIONS = 10;
     private final int TOTAL_GAME_TIME = 60000;
 
     private CountDownTimer gameTimer;
@@ -85,7 +83,7 @@ public class GameActivity extends AppCompatActivity {
     }
 
     private void fetchNextQuestion() {
-        if (questionCount >= MAX_QUESTIONS) {
+        if (questionCount >= 100) {
             runOnUiThread(this::showResultsDialog);
             return;
         }
@@ -174,6 +172,7 @@ public class GameActivity extends AppCompatActivity {
                 body.put("userId", userId);
                 body.put("questionId", qid);
                 body.put("userAnswer", answer);
+                body.put("mode", gameMode);
 
                 OutputStream os = conn.getOutputStream();
                 os.write(body.toString().getBytes());
