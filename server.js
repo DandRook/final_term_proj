@@ -1,15 +1,14 @@
-// server.js
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
 const csv = require('csv-parser');
 
 const PORT = process.env.PORT || 3000;
+
 const quizQuestions = [];
-let playerQueue = [];
-const matchMap = new Map(); // userId -> opponentId
-const matchQuestions = new Map(); // matchKey -> question
-const matchSubmissions = new Map(); // matchKey -> Set(userIds)
+const playerQueue = [];
+const matchMap = new Map();           // userId => opponentId
+const playerQuestions = new Map();    // userId => currentQuestion
 
 fs.createReadStream('questions.csv')
   .pipe(csv())
@@ -18,14 +17,14 @@ fs.createReadStream('questions.csv')
     console.log(`Loaded ${quizQuestions.length} questions`);
   });
 
-function getMatchKey(user1, user2) {
-  return [user1, user2].sort().join('_');
+function getRandomQuestion() {
+  const index = Math.floor(Math.random() * quizQuestions.length);
+  return quizQuestions[index];
 }
 
 function matchPlayer(userId) {
   if (matchMap.has(userId)) {
-    const opponentId = matchMap.get(userId);
-    return { status: 'matched', opponentId };
+    return { status: 'matched', opponentId: matchMap.get(userId) };
   }
 
   if (playerQueue.length > 0 && playerQueue[0] !== userId) {
@@ -40,11 +39,6 @@ function matchPlayer(userId) {
   }
 
   return { status: 'waiting' };
-}
-
-function getRandomQuestion() {
-  const index = Math.floor(Math.random() * quizQuestions.length);
-  return quizQuestions[index];
 }
 
 const server = http.createServer((req, res) => {
@@ -66,42 +60,34 @@ const server = http.createServer((req, res) => {
         status: 'matched',
         question: q.question,
         questionId: q.id,
-        options: [
-          q.option1,
-          q.option2,
-          q.option3,
-          q.option4
-        ].filter(Boolean)
+        options: [q.option1, q.option2, q.option3, q.option4].filter(Boolean)
       }));
     }
 
-    // 1v1 mode
-    const matchStatus = matchPlayer(userId);
+    // === 1v1 Mode ===
+    if (mode === '1v1') {
+      const matchStatus = matchPlayer(userId);
 
-    if (matchStatus.status === 'waiting') {
-      return res.end(JSON.stringify({ status: 'waiting' }));
+      if (matchStatus.status === 'waiting') {
+        return res.end(JSON.stringify({ status: 'waiting' }));
+      }
+
+      if (!playerQuestions.has(userId)) {
+        const q = getRandomQuestion();
+        playerQuestions.set(userId, q);
+        console.log(`Assigned question to ${userId}: ${q.question}`);
+      }
+
+      const q = playerQuestions.get(userId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        status: 'matched',
+        opponentId: matchStatus.opponentId,
+        question: q.question,
+        questionId: q.id,
+        options: [q.option1, q.option2, q.option3, q.option4].filter(Boolean)
+      }));
     }
-
-    const opponentId = matchStatus.opponentId;
-    const matchKey = getMatchKey(userId, opponentId);
-
-    if (!matchQuestions.has(matchKey)) {
-      const q = getRandomQuestion();
-      matchQuestions.set(matchKey, q);
-      matchSubmissions.set(matchKey, new Set());
-      console.log(`Assigned new question for match ${matchKey}: ${q.question}`);
-    }
-
-    const q = matchQuestions.get(matchKey);
-    console.log(`Sending question to ${userId}: ${q.question}`);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({
-      status: 'matched',
-      opponentId,
-      question: q.question,
-      questionId: q.id,
-      options: [q.option1, q.option2, q.option3, q.option4].filter(Boolean)
-    }));
   }
 
   else if (parsedUrl.pathname === '/submit-answer' && req.method === 'POST') {
@@ -116,16 +102,10 @@ const server = http.createServer((req, res) => {
         const correct = question.correctAnswer.trim().toLowerCase() === userAnswer.trim().toLowerCase();
 
         if (mode === '1v1') {
-          const opponentId = matchMap.get(userId);
-          const matchKey = getMatchKey(userId, opponentId);
-          const submitted = matchSubmissions.get(matchKey) || new Set();
-          submitted.add(userId);
-
-          if (submitted.size === 2) {
-            matchSubmissions.set(matchKey, new Set()); // Reset
-            matchQuestions.delete(matchKey); // Force next rotation
-          } else {
-            matchSubmissions.set(matchKey, submitted);
+          const q = playerQuestions.get(userId);
+          if (q && q.id === questionId) {
+            playerQuestions.delete(userId);
+            console.log(`Player ${userId} answered question ${questionId}`);
           }
         }
 
@@ -136,11 +116,6 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: e.message }));
       }
     });
-  }
-
-  else if (parsedUrl.pathname === '/ping') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'online' }));
   }
 
   else {
