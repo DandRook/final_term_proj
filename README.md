@@ -1,4 +1,4 @@
-# Final Term Project – Android App (Core Focus) + Node.js Quiz Server
+# Final Term Project – Android App + Node.js Quiz Server
 
 This project combines an interactive Android mobile application with a hosted Node.js-based quiz server to deliver both single-player and competitive 1v1 quiz experiences.
 
